@@ -1,10 +1,89 @@
 #include <SDL3/SDL.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+// stack BEGIN
+const int MAX_ALLOWED_STACK_SIZE = 256;
+typedef struct stack {
+  int head;
+  int max_size;
+  int16_t data[MAX_ALLOWED_STACK_SIZE];
+} Stack;
+
+bool stack_is_empty(Stack *s) { return s->head == -1; }
+bool stack_is_full(Stack *s) { return s->head == s->max_size; }
+
+void stack_init(Stack *s, int max_size) {
+  if (max_size > MAX_ALLOWED_STACK_SIZE) {
+    printf("allocating more stack space than allowed is prohibited");
+    exit(1);
+  }
+
+  s->max_size = max_size;
+  s->head = -1;
+}
+
+void stack_push(Stack *s, int16_t val) {
+  if (stack_is_full(s)) {
+    printf("stack overflow!\n");
+    exit(1);
+  }
+
+  ++s->head;
+  s->data[s->head] = val;
+}
+
+int16_t stack_pop(Stack *s) {
+  if (stack_is_empty(s)) {
+    printf("cannot pop empty stack!\n");
+    exit(1);
+  }
+
+  int val = s->data[s->head];
+  --s->head;
+
+  return val;
+}
+
+void stack_print(Stack *s) {
+  for (int i = 0; i <= s->head; ++i) {
+    printf("%d ", s->data[i]);
+  }
+
+  printf("\n");
+}
+
+int16_t stack_peek(Stack *s) {
+  if (stack_is_empty(s)) {
+    printf("cannot peek empty stack\n");
+    exit(1);
+  }
+
+  return s->data[s->head];
+}
+// stack END
 
 void close_sdl(SDL_Window *window, SDL_Renderer *renderer);
 void render(SDL_Renderer *renderer);
 
 int main() {
+  static int memory[4096];
+  static int progra_counter;
+  static int16_t i;
+  static int8_t v[16];
+  static Stack functions_stack;
+
+  stack_init(&functions_stack, 128);
+  stack_print(&functions_stack);
+  stack_push(&functions_stack, 2);
+  stack_push(&functions_stack, 5);
+  stack_push(&functions_stack, 1);
+  stack_print(&functions_stack);
+  int poped = stack_pop(&functions_stack);
+  printf("poped: %d\n", poped);
+  stack_print(&functions_stack);
+
   SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
 
   SDL_Window *window;

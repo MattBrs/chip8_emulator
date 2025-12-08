@@ -75,14 +75,6 @@ int main() {
   static Stack functions_stack;
 
   stack_init(&functions_stack, 128);
-  stack_print(&functions_stack);
-  stack_push(&functions_stack, 2);
-  stack_push(&functions_stack, 5);
-  stack_push(&functions_stack, 1);
-  stack_print(&functions_stack);
-  int poped = stack_pop(&functions_stack);
-  printf("poped: %d\n", poped);
-  stack_print(&functions_stack);
 
   SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
 

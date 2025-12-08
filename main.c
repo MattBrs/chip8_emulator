@@ -3,8 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define MEMSIZE 4096
+#define MAX_ALLOWED_STACK_SIZE 256
+
 // stack BEGIN
-const int MAX_ALLOWED_STACK_SIZE = 256;
 typedef struct stack {
   int head;
   int max_size;
@@ -64,16 +66,39 @@ int16_t stack_peek(Stack *s) {
 }
 // stack END
 
+static int8_t memory[MEMSIZE];
+static int16_t program_counter;
+static int16_t i;             // index register
+static int8_t v[16];          // general purpose variables registers
+static Stack functions_stack; // functions / subroutines stack
+static int8_t delay_timer;    // decremented at rate of 60hz until 0
+static int8_t audio_timer;    // like delay_timer, beeps at numbers != 0
+
+uint8_t fonts[80] = {
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+};
+
 void close_sdl(SDL_Window *window, SDL_Renderer *renderer);
 void render(SDL_Renderer *renderer);
 
-int main() {
-  static int memory[4096];
-  static int progra_counter;
-  static int16_t i;
-  static int8_t v[16];
-  static Stack functions_stack;
+void execute_cycle();
 
+int main() {
   stack_init(&functions_stack, 128);
 
   SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
@@ -129,4 +154,8 @@ void close_sdl(SDL_Window *window, SDL_Renderer *renderer) {
 
   SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
   SDL_Quit();
+}
+
+void execute_cycle() {
+  // run fetch, decode and execute
 }

@@ -2,101 +2,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#define MEMSIZE 4096
-#define MAX_ALLOWED_STACK_SIZE 256
-
-// stack BEGIN
-typedef struct stack {
-  int head;
-  int max_size;
-  int16_t data[MAX_ALLOWED_STACK_SIZE];
-} Stack;
-
-bool stack_is_empty(Stack *s) { return s->head == -1; }
-bool stack_is_full(Stack *s) { return s->head == s->max_size; }
-
-void stack_init(Stack *s, int max_size) {
-  if (max_size > MAX_ALLOWED_STACK_SIZE) {
-    printf("allocating more stack space than allowed is prohibited");
-    exit(1);
-  }
-
-  s->max_size = max_size;
-  s->head = -1;
-}
-
-void stack_push(Stack *s, int16_t val) {
-  if (stack_is_full(s)) {
-    printf("stack overflow!\n");
-    exit(1);
-  }
-
-  ++s->head;
-  s->data[s->head] = val;
-}
-
-int16_t stack_pop(Stack *s) {
-  if (stack_is_empty(s)) {
-    printf("cannot pop empty stack!\n");
-    exit(1);
-  }
-
-  int val = s->data[s->head];
-  --s->head;
-
-  return val;
-}
-
-void stack_print(Stack *s) {
-  for (int i = 0; i <= s->head; ++i) {
-    printf("%d ", s->data[i]);
-  }
-
-  printf("\n");
-}
-
-int16_t stack_peek(Stack *s) {
-  if (stack_is_empty(s)) {
-    printf("cannot peek empty stack\n");
-    exit(1);
-  }
-
-  return s->data[s->head];
-}
-// stack END
-
-static int8_t memory[MEMSIZE];
-static int16_t program_counter;
-static int16_t i;             // index register
-static int8_t v[16];          // general purpose variables registers
-static Stack functions_stack; // functions / subroutines stack
-static int8_t delay_timer;    // decremented at rate of 60hz until 0
-static int8_t audio_timer;    // like delay_timer, beeps at numbers != 0
-
-uint8_t fonts[80] = {
-    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-    0x20, 0x60, 0x20, 0x20, 0x70, // 1
-    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
-};
-
-void close_sdl(SDL_Window *window, SDL_Renderer *renderer);
-void render(SDL_Renderer *renderer);
-
-void execute_cycle();
+#include "main.h"
+#include "stack.h"
 
 int main() {
   stack_init(&functions_stack, 128);
@@ -138,8 +47,25 @@ int main() {
 }
 
 void render(SDL_Renderer *renderer) {
-  SDL_SetRenderDrawColor(renderer, 12, 34, 12, 255);
+  SDL_Surface *screen_surface =
+      SDL_CreateSurface(64, 32, SDL_PIXELFORMAT_RGBA8888);
+  for (int i = 0; i < 64; ++i) {
+    for (int j = 0; j < 32; ++j) {
+      set_pixel_color(screen_surface, i, j, screen_state[i][j]);
+    }
+  }
+
+  SDL_Texture *screen_texture =
+      SDL_CreateTextureFromSurface(renderer, screen_surface);
+
+  SDL_Rect texture_rect;
+  texture_rect.x = 0;
+  texture_rect.y = 0;
+  texture_rect.w = 64;
+  texture_rect.h = 32;
+
   SDL_RenderClear(renderer);
+  SDL_RenderTexture(renderer, screen_texture, NULL, NULL);
   SDL_RenderPresent(renderer);
 }
 
@@ -154,6 +80,22 @@ void close_sdl(SDL_Window *window, SDL_Renderer *renderer) {
 
   SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
   SDL_Quit();
+}
+
+void set_pixel_color(SDL_Surface *surface, const int x, const int y,
+                     const uint32_t color) {
+  if (surface == NULL) {
+    return;
+  }
+
+  Uint8 *pixel = (Uint8 *)surface->pixels;
+  pixel += (y * surface->pitch) + (x * sizeof(uint32_t));
+  *((uint32_t *)pixel) = color;
+}
+
+void init_emulator() {
+  memcpy(memory + 0x050, fonts, 80); // copy fonts into mem
+  program_counter = 0x200;
 }
 
 void execute_cycle() {

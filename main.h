@@ -4,10 +4,14 @@
 #include "stack.h"
 #include <SDL3/SDL.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define MEMSIZE 4096
+#define SCREEN_W 64
+#define SCREEN_H 32
+#define SCALE 10
 
-static uint32_t screen_state[64][32]= {0};
+static uint32_t screen_state[SCREEN_W][SCREEN_H] = {0};
 
 const uint8_t fonts[80] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -38,9 +42,21 @@ static int8_t audio_timer;    // like delay_timer, beeps at numbers != 0
 
 void close_sdl(SDL_Window *window, SDL_Renderer *renderer);
 void render(SDL_Renderer *renderer);
-void set_pixel_color(SDL_Surface* surface,const int x, const int y, const uint32_t color);
+void set_pixel_color(SDL_Surface *surface, const int x, const int y,
+                     const uint32_t color);
+SDL_Texture *get_screen_texture(SDL_Renderer *renderer, const int screen_w,
+                                const int screen_h);
 
 void init_emulator(); // loads stuff into memory and bootstraps the system
-void execute_cycle();
+void load_program(char* program_file_path);
+bool execute_cycle();
+
+void op_dxyn();
+void op_clear_screen();
+void op_jump(uint16_t dst);
+void op_set_index(uint16_t value);
+void op_add_register(uint8_t reg, uint8_t value);
+void op_set_register(uint8_t reg, uint8_t value);
+void op_draw_sprite(uint8_t reg1, uint8_t reg2, uint8_t n);
 
 #endif // !MAIN_H

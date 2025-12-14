@@ -39,9 +39,13 @@ int main() {
       }
     }
 
-    execute_cycle();
-    render(renderer);
-    SDL_Delay(1000 / 60);
+    bool should_update_screen = execute_cycle();
+    if (should_update_screen) {
+        printf("rendering\n");
+      render(renderer);
+    }
+
+    SDL_Delay(1000 / 700);
     // running = false;
   }
 

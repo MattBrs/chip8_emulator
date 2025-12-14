@@ -7,9 +7,9 @@
 #include "main.h"
 #include "stack.h"
 
-int main() {
+int main(int argc, char *argv[]) {
   stack_init(&functions_stack, 128);
-  // init_emulator();
+  init_emulator(argc > 1 ? argv[1] : NULL);
 
   SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS);
 
@@ -28,7 +28,6 @@ int main() {
   SDL_SetRenderLogicalPresentation(renderer, SCREEN_W, SCREEN_H,
                                    SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
-  init_emulator();
   bool running = true;
   SDL_Event event;
 
@@ -41,12 +40,10 @@ int main() {
 
     bool should_update_screen = execute_cycle();
     if (should_update_screen) {
-        printf("rendering\n");
       render(renderer);
     }
 
     SDL_Delay(1000 / 700);
-    // running = false;
   }
 
   close_sdl(window, renderer);
@@ -102,11 +99,11 @@ SDL_Texture *get_screen_texture(SDL_Renderer *renderer, const int screen_w,
   return SDL_CreateTextureFromSurface(renderer, screen_surface);
 }
 
-void init_emulator() {
+void init_emulator(char *rom_name) {
   memcpy(memory + 0x050, fonts, 80); // copy fonts into mem
   program_counter = 0x200;
 
-  load_program("ibm.ch8");
+  load_program(rom_name != NULL ? rom_name : "roms/IBM_Logo.ch8");
 }
 
 void load_program(char *program_file_path) {
@@ -151,11 +148,12 @@ void load_program(char *program_file_path) {
   printf("the program has been loaded correctly\n");
 }
 
+// run fetch, decode and execute
 bool execute_cycle() {
   bool should_update_screen = false;
-  // run fetch, decode and execute
-  int16_t op_code =
-      (memory[program_counter] << 8) | memory[program_counter + 1];
+  uint16_t op_code = ((uint8_t)memory[program_counter] << 8) |
+                     (uint8_t)memory[program_counter + 1];
+
   program_counter += 2;
 
   uint8_t op_type = (op_code & 0xF000) >> 12;
@@ -193,8 +191,13 @@ bool execute_cycle() {
     op_draw_sprite(x, y, n);
     should_update_screen = true;
     break;
+  case 0xF:
+    printf("%x\n", nn);
+    // exit(1);
+    break;
   default:
     printf("undefined instruction: %x\n", op_type);
+    // exit(1);
   }
 
   return should_update_screen;
@@ -215,7 +218,7 @@ void op_draw_sprite(uint8_t reg1, uint8_t reg2, uint8_t n) {
   int target_pos_y = v[reg2] & (SCREEN_H - 1);
   v[0xf] = 0;
 
-  int8_t *sprite = memory + index_register;
+  uint8_t *sprite = memory + index_register;
   for (int i = 0; i < n; ++i) {
     int effective_pos_y = target_pos_y + i;
     if (effective_pos_y >= SCREEN_H) {
@@ -246,8 +249,8 @@ void op_draw_sprite(uint8_t reg1, uint8_t reg2, uint8_t n) {
 }
 
 void op_clear_screen() {
-  for (int i = 0; i < SCREEN_W; ++i) {
-    for (int j = 0; j < SCREEN_H; ++j) {
+  for (int i = 0; i < SCREEN_H; ++i) {
+    for (int j = 0; j < SCREEN_W; ++j) {
       screen_state[i][j] = 0x0;
     }
   }

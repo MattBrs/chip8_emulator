@@ -9,7 +9,7 @@
 #define MEMSIZE 4096
 #define SCREEN_W 64
 #define SCREEN_H 32
-#define SCALE 15
+#define SCALE 10
 
 static bool screen_state[SCREEN_H][SCREEN_W] = {0};
 
@@ -32,7 +32,7 @@ const uint8_t fonts[80] = {
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
 
-static int8_t memory[MEMSIZE];
+static uint8_t memory[MEMSIZE];
 static int16_t program_counter;
 static int16_t index_register;             // index register
 static int8_t v[16];          // general purpose variables registers
@@ -53,7 +53,7 @@ SDL_Texture *get_screen_texture(SDL_Renderer *renderer, const int screen_w,
 uint8_t* byte_to_bits(const uint8_t byte, uint8_t* bits_arr);
 
 // emulator generic functions
-void init_emulator(); // loads stuff into memory and bootstraps the system
+void init_emulator(char* rom_name); // loads stuff into memory and bootstraps the system
 void load_program(char* program_file_path);
 bool execute_cycle();
 

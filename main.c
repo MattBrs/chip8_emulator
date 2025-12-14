@@ -88,9 +88,10 @@ SDL_Texture *get_screen_texture(SDL_Renderer *renderer, const int screen_w,
                                 const int screen_h) {
   SDL_Surface *screen_surface =
       SDL_CreateSurface(SCREEN_W, SCREEN_H, SDL_PIXELFORMAT_RGBA8888);
-  for (int i = 0; i < SCREEN_W; ++i) {
-    for (int j = 0; j < SCREEN_H; ++j) {
-      set_pixel_color(screen_surface, i, j, screen_state[i][j]);
+  for (int i = 0; i < SCREEN_H; ++i) {
+    for (int j = 0; j < SCREEN_W; ++j) {
+      uint32_t pixel_color = screen_state[i][j] ? 0xFFFFFFFF : 0x0;
+      set_pixel_color(screen_surface, j, i, pixel_color);
     }
   }
 
@@ -184,7 +185,7 @@ bool execute_cycle() {
     op_set_index(nnn);
     break;
   case 0xD:
-    printf("draw screen\n");
+    printf("draw screen %d, %d, %d\n", x, y, n);
     op_draw_sprite(x, y, n);
     should_update_screen = true;
     break;
@@ -203,14 +204,41 @@ void op_set_register(uint8_t reg, uint8_t value) { v[reg] = value; }
 
 void op_add_register(uint8_t reg, uint8_t value) { v[reg] += value; }
 
-void op_set_index(uint16_t value) { i = value; }
+void op_set_index(uint16_t value) { index_register = value; }
 
 void op_draw_sprite(uint8_t reg1, uint8_t reg2, uint8_t n) {
-  // sprites are always 1 byte large
-  // n tells us the height (how many bytes to read)
+  int target_pos_x = v[reg1] & (SCREEN_W - 1);
+  int target_pos_y = v[reg2] & (SCREEN_H - 1);
+  v[0xf] = 0;
 
-  uint8_t pos_x = v[reg1];
-  uint8_t pos_y = v[reg2];
+  int8_t *sprite = memory + index_register;
+  for (int i = 0; i < n; ++i) {
+    int effective_pos_y = target_pos_y + i;
+    if (effective_pos_y >= SCREEN_H) {
+      ++sprite;
+      continue;
+    }
+
+    uint8_t sprite_bits[8];
+    byte_to_bits(*sprite, sprite_bits);
+
+    for (int j = 0; j < 8; ++j) {
+      int effective_pos_x = target_pos_x + j;
+      if (effective_pos_x >= SCREEN_W) {
+        break;
+      }
+
+      bool current_pixel_state = screen_state[effective_pos_y][effective_pos_x];
+      screen_state[effective_pos_y][effective_pos_x] ^= sprite_bits[j];
+
+      if (current_pixel_state &&
+          !screen_state[effective_pos_y][effective_pos_x]) {
+        v[0xf] = 1;
+      }
+    }
+
+    ++sprite;
+  }
 }
 
 void op_clear_screen() {
@@ -219,4 +247,15 @@ void op_clear_screen() {
       screen_state[i][j] = 0x0;
     }
   }
+}
+
+uint8_t *byte_to_bits(const uint8_t byte, uint8_t *bits_arr) {
+  uint8_t mask = 0x80;
+
+  for (int i = 0; i < 8; ++i) {
+    bits_arr[i] = (byte & mask) != 0;
+    mask >>= 1;
+  }
+
+  return bits_arr;
 }

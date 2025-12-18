@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "main.h"
 #include "stack.h"
@@ -26,7 +27,7 @@ int main(int argc, char *argv[]) {
   }
 
   SDL_SetRenderLogicalPresentation(renderer, SCREEN_W, SCREEN_H,
-                                   SDL_LOGICAL_PRESENTATION_LETTERBOX);
+                                   SDL_LOGICAL_PRESENTATION_OVERSCAN);
 
   bool running = true;
   SDL_Event event;
@@ -100,6 +101,11 @@ SDL_Texture *get_screen_texture(SDL_Renderer *renderer, const int screen_w,
 }
 
 void init_emulator(char *rom_name) {
+  srand(time(NULL));
+  memset(memory, 0, MEMSIZE);
+  memset(v, 0, 16);
+  index_register = 0;
+
   memcpy(memory + 0x050, fonts, 80); // copy fonts into mem
   program_counter = 0x200;
 
@@ -107,7 +113,7 @@ void init_emulator(char *rom_name) {
 }
 
 void load_program(char *program_file_path) {
-  FILE *program_file = fopen(program_file_path, "r");
+  FILE *program_file = fopen(program_file_path, "rb");
   if (program_file == NULL) {
     printf("error while opening file\n");
     return;
@@ -148,6 +154,17 @@ void load_program(char *program_file_path) {
   printf("the program has been loaded correctly\n");
 }
 
+uint8_t *byte_to_bits(const uint8_t byte, uint8_t *bits_arr) {
+  uint8_t mask = 0x80;
+
+  for (int i = 0; i < 8; ++i) {
+    bits_arr[i] = (byte & mask) != 0;
+    mask >>= 1;
+  }
+
+  return bits_arr;
+}
+
 // run fetch, decode and execute
 bool execute_cycle() {
   bool should_update_screen = false;
@@ -163,36 +180,85 @@ bool execute_cycle() {
   uint8_t nn = op_code & 0x00FF;
   uint16_t nnn = op_code & 0x0FFF;
 
-  printf("op_type: %x\n", op_type);
   switch (op_type) {
   case 0x0:
-    printf("clear screen\n");
-    op_clear_screen();
-    should_update_screen = true;
+    if (nn == 0xE0) {
+      op_clear_screen();
+      should_update_screen = true;
+    } else if (nn == 0xEE) {
+      op_return_subroutine();
+    }
     break;
   case 0x1:
-    printf("jump\n");
     op_jump(nnn);
     break;
+  case 0x2:
+    op_call_subroutine(nnn);
+    break;
+  case 0x3:
+    op_skip_eq_reg_num(x, nn);
+    break;
+  case 0x4:
+    op_skip_not_eq_reg_num(x, nn);
+    break;
+  case 0x5:
+    op_skip_eq_reg(x, y);
+    break;
   case 0x6:
-    printf("set register \n");
     op_set_register(x, nn);
     break;
   case 0x7:
-    printf("add value to  register \n");
-    op_add_register(x, nn);
+    op_add_to_register(x, nn);
+    break;
+  case 0x8:
+    switch (n) {
+    case 0x0:
+      op_set(x, y);
+      break;
+    case 0x1:
+      op_binary_or(x, y);
+      break;
+    case 0x2:
+      op_binary_and(x, y);
+      break;
+    case 0x3:
+      op_binary_xor(x, y);
+      break;
+    case 0x4:
+      op_add_registers(x, y);
+      break;
+    case 0x5:
+      op_vx_minus_vy(x, y);
+      break;
+    case 0x6:
+      op_shift_right(x, y);
+      break;
+    case 0x7:
+      op_vy_minus_vx(x, y);
+      break;
+    case 0xE:
+      op_shift_left(x, y);
+      break;
+    default:;
+    }
+    break;
+  case 0x9:
+    op_skip_not_eq_reg(x, y);
     break;
   case 0xA:
-    printf("set index register\n");
     op_set_index(nnn);
     break;
+  case 0xB:
+    op_jump_with_offset(x, nn, nnn);
+    break;
+  case 0xC:
+    op_random(x, nn);
+    break;
   case 0xD:
-    printf("draw screen %d, %d, %d\n", x, y, n);
     op_draw_sprite(x, y, n);
     should_update_screen = true;
     break;
   case 0xF:
-    printf("%x\n", nn);
     // exit(1);
     break;
   default:
@@ -203,13 +269,11 @@ bool execute_cycle() {
   return should_update_screen;
 }
 
-void op_dxyn() {}
-
 void op_jump(uint16_t dst) { program_counter = dst; }
 
 void op_set_register(uint8_t reg, uint8_t value) { v[reg] = value; }
 
-void op_add_register(uint8_t reg, uint8_t value) { v[reg] += value; }
+void op_add_to_register(uint8_t reg, uint8_t value) { v[reg] += value; }
 
 void op_set_index(uint16_t value) { index_register = value; }
 
@@ -256,13 +320,110 @@ void op_clear_screen() {
   }
 }
 
-uint8_t *byte_to_bits(const uint8_t byte, uint8_t *bits_arr) {
-  uint8_t mask = 0x80;
+void op_skip_eq_reg_num(uint8_t reg, uint8_t value) {
+  if (v[reg] == value) {
+    program_counter += 2;
+  }
+}
+void op_skip_not_eq_reg_num(uint8_t reg, uint8_t value) {
+  if (v[reg] != value) {
+    program_counter += 2;
+  }
+}
 
-  for (int i = 0; i < 8; ++i) {
-    bits_arr[i] = (byte & mask) != 0;
-    mask >>= 1;
+void op_skip_eq_reg(uint8_t reg1, uint8_t reg2) {
+  if (v[reg1] == v[reg2]) {
+    program_counter += 2;
+  }
+}
+
+void op_skip_not_eq_reg(uint8_t reg1, uint8_t reg2) {
+  if (v[reg1] != v[reg2]) {
+    program_counter += 2;
+  }
+}
+
+void op_return_subroutine() {
+  int16_t next_action = stack_pop(&functions_stack);
+  program_counter = next_action;
+}
+
+void op_call_subroutine(uint16_t function) {
+  stack_push(&functions_stack, program_counter);
+  program_counter = function;
+}
+
+void op_set(uint8_t reg1, uint8_t reg2) { v[reg1] = v[reg2]; }
+
+void op_binary_or(uint8_t reg1, uint8_t reg2) {
+  v[reg1] = v[reg1] | v[reg2];
+  v[0xF] = 0;
+}
+
+void op_binary_and(uint8_t reg1, uint8_t reg2) {
+  v[reg1] = v[reg1] & v[reg2];
+  v[0xF] = 0;
+}
+
+void op_binary_xor(uint8_t reg1, uint8_t reg2) {
+  v[reg1] = v[reg1] ^ v[reg2];
+  v[0xF] = 0;
+}
+
+void op_add_registers(uint8_t reg1, uint8_t reg2) {
+  uint8_t a = v[reg1];
+  uint8_t b = v[reg2];
+  uint8_t c = a + b;
+
+  v[reg1] = c;
+  v[0xF] = c < a ? 1 : 0;
+}
+
+void op_vx_minus_vy(uint8_t reg1, uint8_t reg2) {
+  uint8_t vx = v[reg1];
+  uint8_t vy = v[reg2];
+  uint8_t flag = (vx >= vy) ? 1 : 0;
+
+  v[reg1] = vx - vy;
+  v[0xF] = flag;
+}
+
+void op_vy_minus_vx(uint8_t reg1, uint8_t reg2) {
+  uint8_t vx = v[reg1];
+  uint8_t vy = v[reg2];
+  uint8_t flag = (vy >= vx) ? 1 : 0;
+
+  v[reg1] = vy - vx;
+  v[0xF] = flag;
+}
+
+void op_shift_right(uint8_t reg1, uint8_t reg2) {
+  if (legacy_mode) {
+    v[reg1] = v[reg2];
   }
 
-  return bits_arr;
+  v[0xf] = v[reg1] & 0x01;
+  v[reg1] >>= 1;
 }
+
+void op_shift_left(uint8_t reg1, uint8_t reg2) {
+  if (legacy_mode) {
+    v[reg1] = v[reg2];
+  }
+
+  v[0xf] = (v[reg1] & 0x80) >> 7;
+  v[reg1] <<= 1;
+}
+
+void op_jump_with_offset(uint8_t reg1, uint8_t nn, uint16_t nnn) {
+  if (legacy_mode) {
+    program_counter = nnn;
+    program_counter += v[0];
+    return;
+  }
+
+  program_counter = nnn;
+  program_counter += v[reg1];
+}
+
+void op_random(uint8_t reg1, uint8_t nn) { v[reg1] = (rand() % 255) & nn; }

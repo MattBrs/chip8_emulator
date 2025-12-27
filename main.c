@@ -27,30 +27,57 @@ int main(int argc, char *argv[]) {
   }
 
   SDL_SetRenderLogicalPresentation(renderer, SCREEN_W, SCREEN_H,
-                                   SDL_LOGICAL_PRESENTATION_OVERSCAN);
+                                   SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
   bool running = true;
-  SDL_Event event;
-
   while (running) {
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_EVENT_QUIT) {
-        running = false;
+    uint64_t current_time = SDL_GetPerformanceCounter();
+    double delta_time = (current_time - last_time) / frequency;
+    last_time = current_time;
+
+    cpu_accumulator += delta_time;
+    timer_accumulator += delta_time;
+
+    handle_input(&running);
+
+    while (cpu_accumulator >= CPU_INTERVAL) {
+      bool should_update_screen = execute_cycle();
+      if (should_update_screen) {
+        render(renderer);
       }
+
+      cpu_accumulator -= CPU_INTERVAL;
     }
 
-    bool should_update_screen = execute_cycle();
-    if (should_update_screen) {
-      render(renderer);
-    }
+    while (timer_accumulator >= TIMER_INTERVAL) {
+      if (delay_timer > 0) {
+        printf("decreasing delay timer\n");
+        --delay_timer;
+      }
 
-    SDL_Delay(1000 / 700);
+      if (audio_timer > 0) {
+        printf("decreasing audio timer\n");
+        --audio_timer;
+      }
+
+      timer_accumulator -= TIMER_INTERVAL;
+    }
   }
 
   close_sdl(window, renderer);
 
   printf("bye bye!\n");
   return 0;
+}
+
+void handle_input(bool *running) {
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    if (event.type == SDL_EVENT_QUIT) {
+      *running = false;
+      return;
+    }
+  }
 }
 
 void render(SDL_Renderer *renderer) {
@@ -106,10 +133,14 @@ void init_emulator(char *rom_name) {
   memset(v, 0, 16);
   index_register = 0;
 
-  memcpy(memory + 0x050, fonts, 80); // copy fonts into mem
+  memcpy(memory + FONT_MEMORY_LOCATION, fonts,
+         FONTSET_SIZE); // copy fonts into mem
   program_counter = 0x200;
 
   load_program(rom_name != NULL ? rom_name : "roms/IBM_Logo.ch8");
+
+  last_time = SDL_GetPerformanceCounter();
+  frequency = (double)SDL_GetPerformanceFrequency();
 }
 
 void load_program(char *program_file_path) {
@@ -258,7 +289,51 @@ bool execute_cycle() {
     op_draw_sprite(x, y, n);
     should_update_screen = true;
     break;
+  case 0xE:
+    switch (nn) {
+    case 0x9E:
+      op_skip_if_key(x);
+      break;
+    case 0xA1:
+      op_skip_if_not_key(x);
+      break;
+    default:;
+    }
+    break;
   case 0xF:
+    switch (nn) {
+    case 0x07:
+      printf("set reg to delay\n");
+      op_set_reg_to_delay_timer(x);
+      break;
+    case 0x15:
+      op_set_delay_timer_to_reg(x);
+      printf("set delay to reg\n");
+      break;
+    case 0x18:
+      op_set_sound_timer_to_reg(x);
+      printf("set sound to reg\n");
+      break;
+    case 0x29:
+      op_set_font_char(x);
+      break;
+    case 0x33:
+      op_decode_to_decimal(x);
+      break;
+    case 0x55:
+      op_store_memory(x);
+      break;
+    case 0x65:
+      op_load_memory(x);
+      break;
+    case 0x0A:
+      op_get_key(x);
+      break;
+    case 0x1E:
+      op_add_to_index(x);
+      break;
+    default:;
+    }
     // exit(1);
     break;
   default:
@@ -427,3 +502,62 @@ void op_jump_with_offset(uint8_t reg1, uint8_t nn, uint16_t nnn) {
 }
 
 void op_random(uint8_t reg1, uint8_t nn) { v[reg1] = (rand() % 255) & nn; }
+
+void op_skip_if_key(uint8_t reg1) {
+  // check if key at v[reg1] is currently being held down
+  // if so, program_counter += 2;
+}
+
+void op_skip_if_not_key(uint8_t reg1) {
+  // check if key at v[reg1] is not currently being held down
+  // if so, program_counter += 2;
+}
+
+void op_set_reg_to_delay_timer(uint8_t reg) { v[reg] = delay_timer; }
+
+void op_set_delay_timer_to_reg(uint8_t reg) { delay_timer = v[reg]; }
+
+void op_set_sound_timer_to_reg(uint8_t reg) { audio_timer = v[reg]; }
+
+void op_add_to_index(uint8_t reg) { index_register += v[reg]; }
+
+void op_get_key(uint8_t reg) {
+  // should block until key is pressed
+  program_counter -= 2;
+}
+
+void op_set_font_char(uint8_t reg) {
+  index_register = (v[reg] * 5) + FONT_MEMORY_LOCATION;
+}
+
+void op_decode_to_decimal(uint8_t reg) {
+  uint8_t val = v[reg];
+
+  memory[index_register + 2] = val % 10;
+  val /= 10;
+
+  memory[index_register + 1] = val % 10;
+  val /= 10;
+
+  memory[index_register] = val;
+}
+
+void op_store_memory(uint8_t reg) {
+  for (int i = 0; i <= reg; ++i) {
+    memory[index_register + i] = v[i];
+  }
+
+  if (legacy_mode) {
+    index_register += reg + 1;
+  }
+}
+
+void op_load_memory(uint8_t reg) {
+  for (int i = 0; i <= reg; ++i) {
+    v[i] = memory[index_register + i];
+  }
+
+  if (legacy_mode) {
+    index_register += reg + 1;
+  }
+}

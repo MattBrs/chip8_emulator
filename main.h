@@ -10,10 +10,12 @@
 #define SCREEN_W 64
 #define SCREEN_H 32
 #define SCALE 8
+#define FONT_MEMORY_LOCATION 0x050
+#define FONTSET_SIZE 80
 
 static bool legacy_mode = true;
 static bool screen_state[SCREEN_H][SCREEN_W] = {0};
-const uint8_t fonts[80] = {
+const uint8_t fonts[FONTSET_SIZE] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
     0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
@@ -40,6 +42,14 @@ static Stack functions_stack;  // functions / subroutines stack
 static uint8_t delay_timer;    // decremented at rate of 60hz until 0
 static uint8_t audio_timer;    // like delay_timer, beeps at numbers != 0
 
+const double CPU_INTERVAL = 1.0 / 700;
+const double TIMER_INTERVAL = 1.0 / 60;
+static double cpu_accumulator = 0.0;
+static double timer_accumulator = 0.0;
+
+static uint64_t last_time = 0.0;
+static double frequency = 0.0;
+
 // SDL functions
 void close_sdl(SDL_Window *window, SDL_Renderer *renderer);
 void render(SDL_Renderer *renderer);
@@ -56,6 +66,7 @@ void init_emulator(
     char *rom_name); // loads stuff into memory and bootstraps the system
 void load_program(char *program_file_path);
 bool execute_cycle();
+void handle_input(bool *running);
 
 // emulator opetaion functions
 void op_clear_screen();
@@ -81,5 +92,16 @@ void op_shift_right(uint8_t reg1, uint8_t reg2);
 void op_shift_left(uint8_t reg1, uint8_t reg2);
 void op_jump_with_offset(uint8_t reg1, uint8_t nn, uint16_t nnn);
 void op_random(uint8_t reg1, uint8_t nn);
+void op_skip_if_key(uint8_t reg1);
+void op_skip_if_not_key(uint8_t reg1);
+void op_set_reg_to_delay_timer(uint8_t reg);
+void op_set_delay_timer_to_reg(uint8_t reg);
+void op_set_sound_timer_to_reg(uint8_t reg);
+void op_add_to_index(uint8_t reg);
+void op_get_key(uint8_t reg);
+void op_set_font_char(uint8_t reg);
+void op_decode_to_decimal(uint8_t reg);
+void op_store_memory(uint8_t reg);
+void op_load_memory(uint8_t reg);
 
 #endif // !MAIN_H

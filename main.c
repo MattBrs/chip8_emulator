@@ -474,20 +474,28 @@ void op_vy_minus_vx(uint8_t reg1, uint8_t reg2) {
 
 void op_shift_right(uint8_t reg1, uint8_t reg2) {
   if (legacy_mode) {
-    v[reg1] = v[reg2];
+    uint8_t shifted_bit = v[reg2] & 0x01;
+    v[reg1] = v[reg2] >> 1;
+    v[0xf] = shifted_bit;
+    return;
   }
 
-  v[0xf] = v[reg1] & 0x01;
+  uint8_t shifted_bit = v[reg1] & 0x01;
   v[reg1] >>= 1;
+  v[0xf] = shifted_bit;
 }
 
 void op_shift_left(uint8_t reg1, uint8_t reg2) {
   if (legacy_mode) {
-    v[reg1] = v[reg2];
+    uint8_t shifted_bit = (v[reg2] & 0x80) >> 7;
+    v[reg1] = v[reg2] << 1;
+    v[0xf] = shifted_bit;
+    return;
   }
 
-  v[0xf] = (v[reg1] & 0x80) >> 7;
+  uint8_t shifted_bit = (v[reg1] & 0x80) >> 7;
   v[reg1] <<= 1;
+  v[0xf] = shifted_bit;
 }
 
 void op_jump_with_offset(uint8_t reg1, uint8_t nn, uint16_t nnn) {

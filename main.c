@@ -29,6 +29,21 @@ int main(int argc, char *argv[]) {
   SDL_SetRenderLogicalPresentation(renderer, SCREEN_W, SCREEN_H,
                                    SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
+  SDL_AudioSpec audio_spec;
+  audio_spec.channels = 1;
+  audio_spec.freq = 8000;
+  audio_spec.format = SDL_AUDIO_F32;
+
+  SDL_AudioStream *audio_stream = SDL_OpenAudioDeviceStream(
+      SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &audio_spec, NULL, NULL);
+  if (!audio_stream) {
+    printf("could not open audio stream\n");
+    close_sdl(window, renderer);
+    exit(1);
+  }
+
+  // SDL_ResumeAudioStreamDevice(audio_stream);
+
   bool running = true;
   while (running) {
     uint64_t current_time = SDL_GetPerformanceCounter();
@@ -39,6 +54,7 @@ int main(int argc, char *argv[]) {
     timer_accumulator += delta_time;
 
     handle_input(&running);
+    handle_audio(audio_stream);
 
     while (cpu_accumulator >= CPU_INTERVAL) {
       bool should_update_screen = execute_cycle();
@@ -57,7 +73,10 @@ int main(int argc, char *argv[]) {
 
       if (audio_timer > 0) {
         printf("decreasing audio timer\n");
+        SDL_ResumeAudioStreamDevice(audio_stream);
         --audio_timer;
+      } else {
+        SDL_PauseAudioStreamDevice(audio_stream);
       }
 
       timer_accumulator -= TIMER_INTERVAL;
@@ -70,12 +89,146 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
+void handle_audio(SDL_AudioStream *stream) {
+  const int minimum_audio =
+      (8000 * sizeof(float)) /
+      2; /* 8000 float samples per second. Half of that. */
+  if (SDL_GetAudioStreamQueued(stream) < minimum_audio) {
+    static float samples[512]; /* this will feed 512 samples each frame until we
+                                  get to our maximum. */
+    int i;
+
+    /* generate a 440Hz pure tone */
+    for (i = 0; i < SDL_arraysize(samples); i++) {
+      const int freq = 440;
+      const float phase = current_sine_sample * freq / 8000.0f;
+      samples[i] = SDL_sinf(phase * 2 * SDL_PI_F);
+      current_sine_sample++;
+    }
+
+    /* wrapping around to avoid floating-point errors */
+    current_sine_sample %= 8000;
+
+    /* feed the new data to the stream. It will queue at the end, and trickle
+     * out as the hardware needs more data. */
+    SDL_PutAudioStreamData(stream, samples, sizeof(samples));
+  }
+}
+
 void handle_input(bool *running) {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     if (event.type == SDL_EVENT_QUIT) {
       *running = false;
       return;
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+      switch (event.key.key) {
+      case SDLK_1:
+        keyboard[0x1] = 1;
+        break;
+      case SDLK_2:
+        keyboard[0x2] = 1;
+        break;
+      case SDLK_3:
+        keyboard[0x3] = 1;
+        break;
+      case SDLK_4:
+        keyboard[0xC] = 1;
+        break;
+      case SDLK_Q:
+        keyboard[0x4] = 1;
+        break;
+      case SDLK_W:
+        keyboard[0x5] = 1;
+        break;
+      case SDLK_E:
+        keyboard[0x6] = 1;
+        break;
+      case SDLK_R:
+        keyboard[0xD] = 1;
+        break;
+      case SDLK_A:
+        keyboard[0x7] = 1;
+        break;
+      case SDLK_S:
+        keyboard[0x8] = 1;
+        break;
+      case SDLK_D:
+        keyboard[0x9] = 1;
+        break;
+      case SDLK_F:
+        keyboard[0xE] = 1;
+        break;
+      case SDLK_Z:
+        keyboard[0xA] = 1;
+        break;
+      case SDLK_X:
+        keyboard[0x0] = 1;
+        break;
+      case SDLK_C:
+        keyboard[0xB] = 1;
+        break;
+      case SDLK_V:
+        keyboard[0xF] = 1;
+        break;
+      default:;
+      }
+    }
+
+    if (event.type == SDL_EVENT_KEY_UP) {
+      switch (event.key.key) {
+      case SDLK_1:
+        keyboard[0x1] = 0;
+        break;
+      case SDLK_2:
+        keyboard[0x2] = 0;
+        break;
+      case SDLK_3:
+        keyboard[0x3] = 0;
+        break;
+      case SDLK_4:
+        keyboard[0xC] = 0;
+        break;
+      case SDLK_Q:
+        keyboard[0x4] = 0;
+        break;
+      case SDLK_W:
+        keyboard[0x5] = 0;
+        break;
+      case SDLK_E:
+        keyboard[0x6] = 0;
+        break;
+      case SDLK_R:
+        keyboard[0xD] = 0;
+        break;
+      case SDLK_A:
+        keyboard[0x7] = 0;
+        break;
+      case SDLK_S:
+        keyboard[0x8] = 0;
+        break;
+      case SDLK_D:
+        keyboard[0x9] = 0;
+        break;
+      case SDLK_F:
+        keyboard[0xE] = 0;
+        break;
+      case SDLK_Z:
+        keyboard[0xA] = 0;
+        break;
+      case SDLK_X:
+        keyboard[0x0] = 0;
+        break;
+      case SDLK_C:
+        keyboard[0xB] = 0;
+        break;
+      case SDLK_V:
+        keyboard[0xF] = 0;
+        break;
+      default:;
+      }
     }
   }
 }
@@ -131,6 +284,7 @@ void init_emulator(char *rom_name) {
   srand(time(NULL));
   memset(memory, 0, MEMSIZE);
   memset(v, 0, 16);
+  memset(keyboard, false, 17);
   index_register = 0;
 
   memcpy(memory + FONT_MEMORY_LOCATION, fonts,
@@ -511,14 +665,18 @@ void op_jump_with_offset(uint8_t reg1, uint8_t nn, uint16_t nnn) {
 
 void op_random(uint8_t reg1, uint8_t nn) { v[reg1] = (rand() % 255) & nn; }
 
-void op_skip_if_key(uint8_t reg1) {
-  // check if key at v[reg1] is currently being held down
-  // if so, program_counter += 2;
+void op_skip_if_key(uint8_t reg) {
+  uint8_t required_key = v[reg];
+  if (keyboard[required_key]) {
+    program_counter += 2;
+  }
 }
 
-void op_skip_if_not_key(uint8_t reg1) {
-  // check if key at v[reg1] is not currently being held down
-  // if so, program_counter += 2;
+void op_skip_if_not_key(uint8_t reg) {
+  uint8_t required_key = v[reg];
+  if (!keyboard[required_key]) {
+    program_counter += 2;
+  }
 }
 
 void op_set_reg_to_delay_timer(uint8_t reg) { v[reg] = delay_timer; }

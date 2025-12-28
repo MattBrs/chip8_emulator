@@ -41,6 +41,7 @@ static uint8_t v[16];          // general purpose variables registers
 static Stack functions_stack;  // functions / subroutines stack
 static uint8_t delay_timer;    // decremented at rate of 60hz until 0
 static uint8_t audio_timer;    // like delay_timer, beeps at numbers != 0
+static bool keyboard[17];
 
 const double CPU_INTERVAL = 1.0 / 700;
 const double TIMER_INTERVAL = 1.0 / 60;
@@ -49,6 +50,7 @@ static double timer_accumulator = 0.0;
 
 static uint64_t last_time = 0.0;
 static double frequency = 0.0;
+static int current_sine_sample = 0;
 
 // SDL functions
 void close_sdl(SDL_Window *window, SDL_Renderer *renderer);
@@ -57,6 +59,8 @@ void set_pixel_color(SDL_Surface *surface, const int x, const int y,
                      const uint32_t color);
 SDL_Texture *get_screen_texture(SDL_Renderer *renderer, const int screen_w,
                                 const int screen_h);
+
+void handle_audio(SDL_AudioStream *stream);
 
 // utils
 uint8_t *byte_to_bits(const uint8_t byte, uint8_t *bits_arr);

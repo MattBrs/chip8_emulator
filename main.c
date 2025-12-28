@@ -685,8 +685,10 @@ void op_set_sound_timer_to_reg(uint8_t reg) { audio_timer = v[reg]; }
 void op_add_to_index(uint8_t reg) { index_register += v[reg]; }
 
 void op_get_key(uint8_t reg) {
-  // should block until key is pressed
-  program_counter -= 2;
+  uint8_t required_key = v[reg];
+  if (!keyboard[required_key]) {
+    program_counter -= 2;
+  }
 }
 
 void op_set_font_char(uint8_t reg) {

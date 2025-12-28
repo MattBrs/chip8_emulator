@@ -59,13 +59,14 @@ int main(int argc, char *argv[]) {
     while (cpu_accumulator >= CPU_INTERVAL) {
       bool should_update_screen = execute_cycle();
       if (should_update_screen) {
-        render(renderer);
+        // render(renderer);
       }
 
       cpu_accumulator -= CPU_INTERVAL;
     }
 
     while (timer_accumulator >= TIMER_INTERVAL) {
+      render(renderer);
       if (delay_timer > 0) {
         printf("decreasing delay timer\n");
         --delay_timer;
@@ -506,6 +507,8 @@ void op_set_index(uint16_t value) { index_register = value; }
 void op_draw_sprite(uint8_t reg1, uint8_t reg2, uint8_t n) {
   int target_pos_x = v[reg1] & (SCREEN_W - 1);
   int target_pos_y = v[reg2] & (SCREEN_H - 1);
+  // int target_pos_x = v[reg1];
+  // int target_pos_y = v[reg2];
   v[0xf] = 0;
 
   uint8_t *sprite = memory + index_register;
@@ -685,8 +688,16 @@ void op_set_sound_timer_to_reg(uint8_t reg) { audio_timer = v[reg]; }
 void op_add_to_index(uint8_t reg) { index_register += v[reg]; }
 
 void op_get_key(uint8_t reg) {
-  uint8_t required_key = v[reg];
-  if (!keyboard[required_key]) {
+  bool pressed = false;
+  for (int i = 0; i < 17; ++i) {
+    if (keyboard[i]) {
+      pressed = true;
+      v[reg] = i;
+      break;
+    }
+  }
+
+  if (!pressed) {
     program_counter -= 2;
   }
 }

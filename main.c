@@ -457,16 +457,13 @@ bool execute_cycle() {
   case 0xF:
     switch (nn) {
     case 0x07:
-      printf("set reg to delay\n");
       op_set_reg_to_delay_timer(x);
       break;
     case 0x15:
       op_set_delay_timer_to_reg(x);
-      printf("set delay to reg\n");
       break;
     case 0x18:
       op_set_sound_timer_to_reg(x);
-      printf("set sound to reg\n");
       break;
     case 0x29:
       op_set_font_char(x);
